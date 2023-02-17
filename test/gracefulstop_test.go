@@ -19,6 +19,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -194,11 +195,13 @@ func (s) TestGracefulStopClosesConnAfterLastStream(t *testing.T) {
 			te.srv.GracefulStop()
 			close(gracefulStopDone)
 		}()
-		st.wantGoAway(http2.ErrCodeNo) // Server sends a GOAWAY due to GracefulStop.
-		pf := st.wantPing()            // Server sends a ping to verify client receipt.
-		st.writePing(true, pf.Data)    // Send ping ack to confirm.
-		st.wantGoAway(http2.ErrCodeNo) // Wait for subsequent GOAWAY to indicate no new stream processing.
-
+		st.wantGoAway(http2.ErrCodeNo)      // Server sends a GOAWAY due to GracefulStop.
+		pf := st.wantPing()                 // Server sends a ping to verify client receipt.
+		st.writePing(true, pf.Data)         // Send ping ack to confirm.
+		f := st.wantGoAway(http2.ErrCodeNo) // Wait for subsequent GOAWAY to indicate no new stream processing.
+		if !bytes.Equal(f.DebugData(), []byte("graceful_stop")) {
+			t.Fatalf("Received unexpected debug data in GOAWAY frame from server: %q; want %q", f.DebugData(), "graceful_stop")
+		}
 		close(gracefulStopCalled) // Unblock server handler.
 
 		fr := st.wantAnyFrame() // Wait for trailer.

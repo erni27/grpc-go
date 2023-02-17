@@ -1166,12 +1166,12 @@ func (t *http2Server) keepalive() {
 			if val <= 0 {
 				// The connection has been idle for a duration of keepalive.MaxConnectionIdle or more.
 				// Gracefully close the connection.
-				t.Drain()
+				t.Drain([]byte("max_idle"))
 				return
 			}
 			idleTimer.Reset(val)
 		case <-ageTimer.C:
-			t.Drain()
+			t.Drain([]byte("max_age"))
 			ageTimer.Reset(t.kp.MaxConnectionAgeGrace)
 			select {
 			case <-ageTimer.C:
@@ -1318,14 +1318,17 @@ func (t *http2Server) RemoteAddr() net.Addr {
 	return t.remoteAddr
 }
 
-func (t *http2Server) Drain() {
+func (t *http2Server) Drain(debugData []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.drainEvent != nil {
 		return
 	}
 	t.drainEvent = grpcsync.NewEvent()
-	t.controlBuf.put(&goAway{code: http2.ErrCodeNo, debugData: []byte{}, headsUp: true})
+	if debugData == nil {
+		debugData = []byte{}
+	}
+	t.controlBuf.put(&goAway{code: http2.ErrCodeNo, debugData: debugData, headsUp: true})
 }
 
 var goAwayPing = &ping{data: [8]byte{1, 6, 1, 8, 0, 3, 3, 9}}
